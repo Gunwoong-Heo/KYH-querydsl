@@ -1,9 +1,12 @@
 package study.KYHquerydsl;
 
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ExpressionUtils;
+import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.CaseBuilder;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.JPAExpressions;
@@ -13,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.Commit;
 import org.springframework.transaction.annotation.Transactional;
 import study.KYHquerydsl.dto.MemberDto;
 import study.KYHquerydsl.dto.QMemberDto;
@@ -61,8 +65,8 @@ public class QuerydslBasicTest {
         em.persist(member4);
 
         // 초기화
-        em.flush();
-        em.clear();
+//        em.flush();
+//        em.clear();
     }
 
     @Test
@@ -610,7 +614,164 @@ public class QuerydslBasicTest {
         }
     }
 
+    @Test
+    public void dynamicQuery_BooleanBuilder() {
+        String usernameParam = "member1";
+        Integer ageParam = 10;
+//        Integer ageParam = null;
 
+        List<Member> result = searchMember1(usernameParam, ageParam);
+        assertThat(result.size()).isEqualTo(1);
+    }
 
+    private List<Member> searchMember1(String usernameCond, Integer ageCond) {
+
+        BooleanBuilder builder = new BooleanBuilder();
+//        BooleanBuilder builder = new BooleanBuilder(member.username.eq(usernameCond));  // null이 들어오지 않게 앞단에서 방어코드를 짜고, `BooleanBuilder`의 초기값으로 값을 세팅할 수도 있다.
+        if(usernameCond != null) {
+            builder.and(member.username.eq(usernameCond));
+        }
+        if(ageCond != null) {
+            builder.and(member.age.eq(ageCond));
+        }
+
+        return queryfactory
+                .selectFrom(member)
+                .where(builder)
+//                .where(builder.and())  // builder도 and,or 등으로 조립이 가능하다.
+                .fetch();
+    }
+
+    // BooleanBuilder 보다 방법을 더 즐겨 사용
+    @Test
+    public void dynamicQuery_WhereParam() {
+        String usernameParam = "member1";
+        Integer ageParam = 10;
+//        Integer ageParam = null;
+
+        List<Member> result = searchMember2(usernameParam, ageParam);
+        assertThat(result.size()).isEqualTo(1);
+    }
+
+    private List<Member> searchMember2(String usernameCond, Integer ageCond) {
+        return queryfactory
+                .selectFrom(member)
+//                .select(new QMemberDto(member.username, member.age)).from(member)  // 이런식으로 다른 곳에서도 `allEq(usernameCond, ageCond)` 를 재활용이 가능하다.
+                .where(allEq(usernameCond, ageCond))
+/*
+                .where(usernameEq(usernameCond), ageEq(ageCond))  // 기본적으로 `,`로 되어 있는 조건들을 `and`로 묶는다. null의 경우는 무시됨.
+*/
+                .fetch();
+    }
+
+    private BooleanExpression usernameEq(String usernameCond) {  // A조건
+        return usernameCond != null ? member.username.eq(usernameCond) : null;
+    }
+
+    private BooleanExpression ageEq(Integer ageCond) {  // B조건
+        return ageCond != null ? member.age.eq(ageCond) : null;
+    }
+
+    // `usernameEq` 과 `ageEq` 메소드의 반환 타입을 `BooleanExpression` 으로 바꾸고 별도의 메소드로 `and` 를 통해 합쳐서 반환
+    // 이러한 방식에서는 null 처리를 따로 신경써서 해줘야함.
+    private BooleanExpression allEq(String usernameCond, Integer ageCond) {  // A+B조건
+        return usernameEq(usernameCond).and(ageEq(ageCond));
+    }
+
+/*
+    private Predicate usernameEq(String usernameCond) {
+        return usernameCond != null ? member.username.eq(usernameCond) : null;
+    }
+
+    private Predicate ageEq(Integer ageCond) {
+        return ageCond != null ? member.age.eq(ageCond) : null;
+    }
+*/
+
+    @Test
+    public void bulkUpdate() {
+        // 벌크연산은 영속성 컨텍스트를 무시하고 db에 바로 쿼리를 날려버린다. -> db상태와 영속성 컨텍스트가 달라짐.
+
+        long count = queryfactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28))
+                .execute();
+
+        // 영컨 member1 = 10 -> DB 비회원
+        // 영컨 member2 = 20 -> DB 비회원
+        // 영컨 member3 = 30 -> DB member3
+        // 영컨 member4 = 40 -> DB member4
+
+        // jpql은 em.find()로 영속성컨텍스트 1차 캐시에서 대상을 찾는것이 아니다. db에 쿼리를 날려서 select 해온다.(log에 select 쿼리 확인)
+        // db에서 셀렉트를 해 왔어도, 영속성 컨텍스트에 값이 있으면 db에서 가져온 것을 무시해버림. (영속성 컨텍스트가 우선권을 지님)
+        List<Member> result1 = queryfactory
+                .selectFrom(member)
+                .fetch();
+
+        for (Member member1 : result1) {
+            System.out.println("member1 = " + member1);
+        }
+
+        em.flush();
+        em.clear();
+
+        // flush, clear 를 하고 다시 member 조회
+        List<Member> result2 = queryfactory
+                .selectFrom(member)
+                .fetch();
+
+        for (Member member1 : result2) {
+            System.out.println("member1 = " + member1);
+        }
+
+    }
+
+    @Test
+    public void bulkAdd() {
+        long count = queryfactory
+                .update(member)
+                .set(member.age, member.age.add(1))  // 더하기
+//                .set(member.age, member.age.multiply(2))  // 곱하기
+                .execute();
+    }
+
+    @Test
+    public void bulkDelete() {
+        queryfactory
+                .delete(member)
+                .where(member.age.gt(18))
+                .execute();
+    }
+
+    @Test
+    public void sqlFunction() {
+        List<String> result = queryfactory
+                .select(Expressions.stringTemplate(
+                        "function('replace', {0}, {1}, {2})",
+                        member.username, "member", "M"))
+                .from(member)
+                .fetch();
+        for (String s : result) {
+            System.out.println("s = " + s);
+        }
+    }
+
+    @Test
+    public void sqlFunction2() {
+        List<String> result = queryfactory
+                .select(member.username)
+                .from(member)
+                .where(member.username.eq(member.username.lower()))
+/*
+                .where(member.username.eq(
+                        Expressions.stringTemplate("function('lower', {0})", member.username)
+                ))
+*/
+                .fetch();
+        for (String s : result) {
+            System.out.println("s = " + s);
+        }
+    }
 
 }
