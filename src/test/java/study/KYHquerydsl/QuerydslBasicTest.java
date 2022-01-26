@@ -2,6 +2,8 @@ package study.KYHquerydsl;
 
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.ExpressionUtils;
+import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.CaseBuilder;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.JPAExpressions;
@@ -12,6 +14,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
+import study.KYHquerydsl.dto.MemberDto;
+import study.KYHquerydsl.dto.QMemberDto;
+import study.KYHquerydsl.dto.UserDto;
 import study.KYHquerydsl.entity.Member;
 import study.KYHquerydsl.entity.QMember;
 import study.KYHquerydsl.entity.QTeam;
@@ -20,6 +25,7 @@ import study.KYHquerydsl.entity.Team;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.PersistenceUnit;
+import javax.persistence.TypedQuery;
 
 import java.util.List;
 
@@ -477,5 +483,134 @@ public class QuerydslBasicTest {
             System.out.println("s = " + s);
         }
     }
+
+    @Test
+    public void simpleProjection() {
+        List<String> result = queryfactory
+                .select(member.username)
+                .from(member)
+                .fetch();
+        for (String s : result) {
+            System.out.println("s = " + s);
+        }
+    }
+
+    @Test
+    public void tupleProjection() {
+        // Tuple은 repository 계층에서만 쓰는 게 좋다.(service,controller 까지 넘어가는 것은 좋은 설계가 아님)
+        List<Tuple> result = queryfactory
+                .select(member.username, member.age)
+                .from(member)
+                .fetch();
+        for (Tuple tuple : result) {
+            String username = tuple.get(member.username);
+            Integer age = tuple.get(member.age);
+            System.out.println("username = " + username);
+            System.out.println("age = " + age);
+        }
+    }
+
+    @Test
+    public void findDtoByJPQL() {
+        List<MemberDto> result = em.createQuery(
+                        "select new study.KYHquerydsl.dto.MemberDto(m.username, m.age) " +
+                                "from Member m", MemberDto.class)
+                .getResultList();
+        for (MemberDto memberDto : result) {
+            System.out.println("memberDto = " + memberDto);
+        }
+    }
+
+    @Test
+    public void findDtoBySetter() {
+        List<MemberDto> result = queryfactory
+                .select(Projections.bean(MemberDto.class,
+                        member.username,
+                        member.age))
+                .from(member)
+                .fetch();
+        for (MemberDto memberDto : result) {
+            System.out.println("memberDto = " + memberDto);
+        }
+    }
+
+    @Test
+    public void findDtoByField() {
+        List<MemberDto> result = queryfactory
+                .select(Projections.fields(MemberDto.class,
+                        member.username,
+                        member.age))
+                .from(member)
+                .fetch();
+        for (MemberDto memberDto : result) {
+            System.out.println("memberDto = " + memberDto);
+        }
+    }
+
+    @Test
+    public void findUserDtoByField() {
+        QMember memberSub = new QMember("memberSub");
+
+        List<UserDto> result = queryfactory
+                .select(Projections.fields(UserDto.class,
+                        member.username.as("name"),  // 필드명이 맞아야한다. 다를 때는 `.as()`로 맞춰줘야한다.
+//                        member.age
+                        ExpressionUtils.as(
+                                JPAExpressions
+                                .select(memberSub.age.max())
+                                .from(memberSub), "age"  // 필드명 age를 맞춰줌
+                        )
+                    )
+                )
+                .from(member)
+                .fetch();
+        for (UserDto userDto : result) {
+            System.out.println("userDto = " + userDto);
+        }
+    }
+
+    @Test
+    public void findDtoByConstructor() {
+        List<MemberDto> result = queryfactory
+                .select(Projections.constructor(MemberDto.class,
+                        member.username,
+                        member.age))
+                .from(member)
+                .fetch();
+        for (MemberDto memberDto : result) {
+            System.out.println("memberDto = " + memberDto);
+        }
+    }
+
+    @Test
+    public void findUserDtoByConstructor() {
+        List<UserDto> result = queryfactory
+                .select(Projections.constructor(UserDto.class,
+                        member.username,  // 생성자로 들어가니 filed나 property가 같지 않아도 됨.
+                        member.age))  // `member.birth`같은 들어가면 안되는 인자를 추가해도 컴파일 시에 오류를 잡아내지 못함.
+                .from(member)
+                .fetch();
+        for (UserDto userDto : result) {
+            System.out.println("userDto = " + userDto);
+        }
+    }
+
+    @Test
+    // `MemberDto`에 `@QueryProjection` 추가
+    // 단점: Q파일 생성해야함, Dto에 querydsl에 의존성을 가지게 됨.(기존에는 clean한 상태였음)
+    //       dto는 service,controller 에서도 쓰고 심지어 api로 바로 반환하기도 한다.
+    //       그러한 dto안에 querydsl이 들어가게 되면 더러워짐.
+    public void findDtoByQueryProjection() {
+        List<MemberDto> result = queryfactory
+                .select(new QMemberDto(member.username, member.age))  // `member.birth`같은 들어가면 안되는 인자를 추가하면 컴파일 시에 오류를 잡아냄. `command + p` 단축키도 잘 먹음
+                .from(member)
+                .fetch();
+        for (MemberDto memberDto : result) {
+            System.out.println("memberDto = " + memberDto);
+        }
+    }
+
+
+
 
 }
