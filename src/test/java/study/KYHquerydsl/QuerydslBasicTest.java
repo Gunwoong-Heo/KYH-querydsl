@@ -665,7 +665,7 @@ public class QuerydslBasicTest {
     }
 
     private BooleanExpression usernameEq(String usernameCond) {  // A조건
-        return usernameCond != null ? member.username.eq(usernameCond) : null;
+        return usernameCond != null ? member.username.eq(usernameCond) : null;  // hasText 사용가능
     }
 
     private BooleanExpression ageEq(Integer ageCond) {  // B조건
