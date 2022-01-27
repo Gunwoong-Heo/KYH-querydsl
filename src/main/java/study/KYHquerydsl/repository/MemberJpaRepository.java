@@ -1,20 +1,14 @@
 package study.KYHquerydsl.repository;
 
 import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.QueryFactory;
-import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-import org.springframework.util.StringUtils;
 import study.KYHquerydsl.dto.MemberSearchCondition;
 import study.KYHquerydsl.dto.MemberTeamDto;
-import study.KYHquerydsl.dto.QMemberDto;
 import study.KYHquerydsl.dto.QMemberTeamDto;
 import study.KYHquerydsl.entity.Member;
-import study.KYHquerydsl.entity.QMember;
-import study.KYHquerydsl.entity.QTeam;
 
 import javax.persistence.EntityManager;
 import java.util.List;
@@ -110,8 +104,8 @@ public class MemberJpaRepository {
                         member.id.as("memberId"),
                         member.username,
                         member.age,
-                        member.team.id.as("memberId"),
-                        member.team.name.as("teanName")
+                        team.id.as("teamId"),
+                        team.name.as("teamName")
                 ))
                 .from(member)
                 .leftJoin(member.team, team)
@@ -129,8 +123,8 @@ public class MemberJpaRepository {
                         member.id.as("memberId"),
                         member.username,
                         member.age,
-                        member.team.id.as("memberId"),
-                        member.team.name.as("teanName")
+                        team.id.as("teamId"),
+                        team.name.as("teamName")
                 ))
                 .from(member)
 /*
@@ -140,7 +134,7 @@ public class MemberJpaRepository {
                 // select Projection 이 달라져도 조건을 재사용 가능하다.
                 .where(
                         usernameEq(condition.getUsername()),
-                        teamnameEq(condition.getTeamName()),
+                        teamNameEq(condition.getTeamName()),
                         ageGoe(condition.getAgeGoe()),
                         ageLoe(condition.getAgeLoe())
 /*
@@ -156,7 +150,7 @@ public class MemberJpaRepository {
 //        return usernameCond != null ? member.username.eq(usernameCond) : null;
         return hasText(usernameCond) ? member.username.eq(usernameCond) : null;  // 공백문자가 넘어오는 것까지 체크
     }
-    private BooleanExpression teamnameEq(String teamNameCond) {
+    private BooleanExpression teamNameEq(String teamNameCond) {
 //        return teamNameCond != null ? member.username.eq(teamNameCond) : null;
         return hasText(teamNameCond) ? member.team.name.eq(teamNameCond) : null;  // 공백문자가 넘어오는 것까지 체크
     }
