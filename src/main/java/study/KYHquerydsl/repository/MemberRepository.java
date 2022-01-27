@@ -5,6 +5,6 @@ import study.KYHquerydsl.entity.Member;
 
 import java.util.List;
 
-public interface MemberRepository extends JpaRepository<Member, Long> {
-    List<Member> findByUserName(String username);
+public interface MemberRepository extends JpaRepository<Member, Long>, MemberRepositoryCustom {
+    List<Member> findByUsername(String username);
 }
