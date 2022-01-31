@@ -12,6 +12,11 @@ plugins {
 	id "com.ewerk.gradle.plugins.querydsl" version "1.0.10"
 }
 
+//plain.jar 생성 방지
+jar {
+	enabled = false
+}
+
 group = 'study'
 version = '0.0.1-SNAPSHOT'
 sourceCompatibility = '11'
